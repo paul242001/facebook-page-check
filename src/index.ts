@@ -47,7 +47,7 @@ async function analyzePage(page: Page, url: string) {
         const lastPosted = (spanTexts[1] || '').split('·')[0].trim();
 
         // Determine Page Status
-        const isActive = lastPosted.includes('2025');
+        const isActive = isPostRecent(lastPosted);
         const pageStatus = isActive ? 'Active' : 'Not Active';
 
         return { LINK: url, PAGE_NAME: pageName, FOLLOWERS: followers, PAGEDETAILS: category, LAST_POSTED: lastPosted, PAGE_STATUS: pageStatus };
@@ -55,6 +55,42 @@ async function analyzePage(page: Page, url: string) {
         console.error(`Failed to analyze ${url}:`, err);
         return { LINK: url, PAGE_NAME: 'Error', FOLLOWERS: 'Error', PAGEDETAILS: 'Error', LAST_POSTED: 'Error', PAGE_STATUS: 'Error' };
     }
+}
+// ✅ Utility function to check if a post is recent
+function isPostRecent(lastPosted: string): boolean {
+    const now = new Date();
+
+    // Case 1: Relative times
+    const relativeMatch = lastPosted.match(/^(\d+)([mhdsw])$/); // e.g., 2d, 5h, 15m
+    if (relativeMatch) {
+        const value = parseInt(relativeMatch[1]);
+        const unit = relativeMatch[2];
+
+        const msMap: Record<string, number> = {
+            m: 60 * 1000,        // minute
+            h: 60 * 60 * 1000,   // hour
+            d: 24 * 60 * 60 * 1000, // day
+            s: 1000,             // second
+            w: 7 * 24 * 60 * 60 * 1000 // week
+        };
+
+        const msAgo = value * msMap[unit];
+        const postTime = new Date(now.getTime() - msAgo);
+
+        // Define cutoff: last 30 days = Active
+        const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return postTime >= cutoff;
+    }
+
+    // Case 2: Absolute date (e.g., "October 22, 2023")
+    const parsedDate = new Date(lastPosted);
+    if (!isNaN(parsedDate.getTime())) {
+        const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days
+        return parsedDate >= cutoff;
+    }
+
+    // If date is unknown or can't be parsed
+    return false;
 }
 
 async function main() {
