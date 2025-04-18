@@ -1,111 +1,182 @@
-import { Browser, Page } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-// import RecaptchaPlugin from 'puppeteer-extra-plugin-recaptcha';
+import fs from 'fs';
+import csv from 'csv-parser';
+import ExcelJS from 'exceljs';
+import type { Page } from 'puppeteer';
 
-// Add stealth plugin
+
+// Use stealth plugin to avoid bot detection
 puppeteer.use(StealthPlugin());
 
-// Add recaptcha plugin (optional, requires 2captcha API key)
-// puppeteer.use(RecaptchaPlugin());
-
-const URL = "https://www.facebook.com/SOICTDigitalMediaPublication";
-
-// Add random delays between actions
+// Helper function for random delays
 const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
 
-let page: Page;
-
-let browser: Browser;
-
-async function analyzePage(URL: string) {
+// Main page analysis function
+async function analyzePage(page: Page, url: string) {
     try {
-        
+        console.log(`🔍 Visiting: ${url}`);
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
 
-        // Navigate to the target page
-        await page.goto(URL, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
-        });
-
+        // Try closing login popup (if any)
         try {
             const closeButtonSelector = 'div[role="dialog"] div[aria-label="Close"]';
             await page.waitForSelector(closeButtonSelector, { timeout: 5000 });
             await page.click(closeButtonSelector);
-            console.log('Dialog closed successfully.');
         } catch (e) {
-            console.log('No dialog appeared.');
+            // Dialog didn't appear — that's okay
         }
-        
-        // Wait for random time
+
         await randomDelay();
 
-        const followersLinkSelector = `a[href="${URL}/followers/"]`;
-        await page.waitForSelector(followersLinkSelector, { timeout: 10000 });
-        const followersText = await page.$eval(followersLinkSelector, el => el.textContent?.trim());
-        console.log('Followers Text:', followersText?.split(' ')[0].trim());
+        // Extract Page Name
+        const pageName = await page.$eval('h1', el => el.textContent?.trim() || 'N/A');
 
+        // Extract Follower Count
+        const followers = await page.$$eval('div[role="main"] span', spans => {
+            const match = spans.find(span => span.textContent?.includes('followers'));
+            return match?.textContent?.split(' ')[0] || 'N/A';
+        });
 
-        const followingLinkSelector = `a[href="${URL}/following/"]`;
-        await page.waitForSelector(followingLinkSelector, { timeout: 10000 });
-        const followingText = await page.$eval(followingLinkSelector, el => el.textContent?.trim());
-        console.log('Following Text:', followingText?.split(' ')[0].trim());
+        // Extract Page Category
+        const category = await page.$$eval('div[role="main"] span', spans => {
+            const match = spans.find(span => span.textContent?.includes('website') || span.textContent?.includes('Company') || span.textContent?.includes('Education'));
+            return match?.textContent?.trim() || 'N/A';
+        });
 
-        const h1Text = await page.$eval('h1.html-h1', el => el.textContent?.trim());
-        console.log('Page Name:', h1Text);
-
-        await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', { timeout: 10000 });
-        const spanTexts = await page.$$eval('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', els =>
+        // Extract Last Posted Text
+        await page.waitForSelector('div[data-pagelet^="FeedUnit"] span[dir="ltr"]', { timeout: 10000 });
+        const spanTexts = await page.$$eval('div[data-pagelet^="FeedUnit"] span[dir="ltr"]', els =>
             els.map(el => el.textContent?.trim())
         );
-        const spanText = spanTexts[1] || '';
-        console.log('Last Posted:', spanText.split('·')[0].trim());
+        const lastPosted = (spanTexts[1] || '').split('·')[0].trim();
 
-        // Close the browser
-        await browser.close();
+        // Determine if the post is from 2025
+        let pageStatus = 'Not Active';
+        try {
+            const now = new Date();
 
-    } catch (error) {
-        console.error('Error:', error);
+            // Match things like "2d", "1w", "3h"
+            if (/\d+[dwmyh]/i.test(lastPosted)) {
+                const amount = parseInt(lastPosted);
+                if (lastPosted.includes('d')) {
+                    const daysAgo = new Date();
+                    daysAgo.setDate(now.getDate() - amount);
+                    if (daysAgo.getFullYear() === 2025) pageStatus = 'Active';
+                } else if (lastPosted.includes('w')) {
+                    const weeksAgo = new Date();
+                    weeksAgo.setDate(now.getDate() - amount * 7);
+                    if (weeksAgo.getFullYear() === 2025) pageStatus = 'Active';
+                } else if (lastPosted.includes('h')) {
+                    if (now.getFullYear() === 2025) pageStatus = 'Active';
+                }
+            } else {
+                // For date-like text such as "April 10"
+                const postDate = new Date(`${lastPosted}, 2025`);
+                if (postDate instanceof Date && !isNaN(postDate.getTime()) && postDate.getFullYear() === 2025) {
+                    pageStatus = 'Active';
+                }
+            }
+        } catch (e) {
+            console.warn(`⚠️ Failed to interpret lastPosted: ${lastPosted}`, e);
+            pageStatus = 'Error';
+        }
+
+        return {
+            LINK: url,
+            PAGE_NAME: pageName,
+            FOLLOWERS: followers,
+            PAGEDETAILS: category,
+            LAST_POSTED: lastPosted,
+            PAGE_STATUS: pageStatus
+        };
+    } catch (err) {
+        console.error(`❌ Failed to analyze ${url}:`, err);
+        return {
+            LINK: url,
+            PAGE_NAME: 'Error',
+            FOLLOWERS: 'Error',
+            PAGEDETAILS: 'Error',
+            LAST_POSTED: 'Error',
+            PAGE_STATUS: 'Error'
+        };
     }
 }
 
+async function main() {
+    const links: string[] = [];
 
-async function main(){
-
-    // Launch browser with additional arguments to avoid detection
-    browser = await puppeteer.launch({
-        headless: false, // Set to true for production
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu',
-            '--window-size=1920,1080',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process',
-        ],
-        defaultViewport: null,
+    // Step 1: Read URLs from CSV
+    await new Promise<void>((resolve, reject) => {
+        fs.createReadStream('link.csv')
+            .pipe(csv())
+            .on('data', (row) => {
+                if (row.URL) links.push(row.URL);
+            })
+            .on('end', resolve)
+            .on('error', reject);
     });
 
-    page = await browser.newPage();
+    // Step 2: Setup Puppeteer
+    const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        defaultViewport: null
+    });
 
-    // Set a realistic user agent
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    const page = await browser.newPage();
 
-    // Enable JavaScript and cookies
+    // Use a realistic browser profile
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36');
     await page.setJavaScriptEnabled(true);
-
-    // Set additional headers to appear more like a real browser
     await page.setExtraHTTPHeaders({
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
     });
 
+    // Step 3: Loop and scrape each page
+    const results = [];
+    for (const link of links) {
+        const data = await analyzePage(page, link);
+        results.push(data);
+    }
 
-    analyzePage(URL);
+    await browser.close();
+
+    // Step 4: Export to Excel
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Facebook Pages');
+
+    sheet.columns = [
+        { header: 'LINK', key: 'LINK', width: 35 },
+        { header: 'PAGE NAME', key: 'PAGE_NAME', width: 30 },
+        { header: 'FOLLOWERS', key: 'FOLLOWERS', width: 15 },
+        { header: 'PAGEDETAILS', key: 'PAGEDETAILS', width: 25 },
+        { header: 'LAST POSTED', key: 'LAST_POSTED', width: 25 },
+        { header: 'PAGE STATUS', key: 'PAGE_STATUS', width: 15 }
+    ];
+
+    results.forEach(row => {
+        const excelRow = sheet.addRow(row);
+
+        if (row.PAGE_STATUS === 'Not Active') {
+            // Highlight Not Active rows in red
+            excelRow.getCell('PAGE_STATUS').fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFF0000' }
+            };
+        } else if (row.PAGE_STATUS === 'Active') {
+            // Highlight Active rows in green
+            excelRow.getCell('PAGE_STATUS').fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF00FF00' }
+            };
+        }
+    });
+
+    await workbook.xlsx.writeFile('FacebookPages.xlsx');
+    console.log('✅ Excel file created: FacebookPages.xlsx');
 }
-
-
 
 main();

@@ -1,6 +1,7 @@
 {
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/puppeteer": "^5.4.7",
     "typescript": "^5.8.3"
   },
   "name": "facebook-scrape",
@@ -15,9 +16,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "puppeteer": "^24.6.0",
+    "csv-parser": "^3.2.0",
+    "exceljs": "^4.4.0",
+    "fs": "^0.0.1-security",
+    "puppeteer": "^24.6.1",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-recaptcha": "^3.6.8",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "xlsx": "^0.18.5"
   }
 }
