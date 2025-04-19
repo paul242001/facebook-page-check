@@ -12,7 +12,7 @@ const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random
 async function analyzePage(page: Page, url: string) {
     console.log(`🔍 Analyzing: ${url}`);
     try {
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 
         // Try to close login dialog if it appears
         try {
@@ -36,13 +36,27 @@ async function analyzePage(page: Page, url: string) {
         // ========== Extract Follower Count ==========
         let followers = 'N/A';
         try {
-            const followersText = await page.$eval('a[href*="/followers"]', el =>
-                el.textContent?.trim() || ''
-            );
-            followers = followersText.split(' ')[0].trim();
+            // Select anchor tags that have "followers" in the href and text content
+            const followerText = await page.$$eval('a[href*="followers"]', links => {
+                for (const link of links) {
+                    const text = link.textContent?.trim() || '';
+                    if (text.toLowerCase().includes('followers')) {
+                        return text;
+                    }
+                }
+                return '';
+            });
+        
+            // Extract the numeric part (e.g. 49K or 36,000)
+            const match = followerText.match(/[\d.,KMB]+/i);
+            if (match) {
+                followers = match[0];
+            }
         } catch (err) {
             console.warn(`⚠️ Followers not found for: ${url}`);
         }
+        
+        
 
         // ========== Extract Page Category ==========
         let category = 'N/A';
@@ -96,53 +110,55 @@ async function analyzePage(page: Page, url: string) {
 function isPostRecent(lastPosted: string): boolean {
     const now = new Date();
     const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
-
-    // Case 1: Relative time (e.g., 2d, 3h, 15m)
-    const relativeMatch = lastPosted.trim().match(/^(\d+)([mhdsw])$/i);
+  
+    lastPosted = lastPosted.trim();
+  
+    // Case 1: Relative times like "3d", "4h", "15m"
+    const relativeMatch = lastPosted.match(/^(\d+)([smhdw])$/i);
     if (relativeMatch) {
-        const value = parseInt(relativeMatch[1]);
-        const unit = relativeMatch[2].toLowerCase();
-
-        const msMap: Record<string, number> = {
-            s: 1000,
-            m: 60 * 1000,
-            h: 60 * 60 * 1000,
-            d: 24 * 60 * 60 * 1000,
-            w: 7 * 24 * 60 * 60 * 1000
-        };
-
-        const msAgo = value * msMap[unit];
-        const postTime = new Date(now.getTime() - msAgo);
-        return postTime >= cutoff;
+      const value = parseInt(relativeMatch[1]);
+      const unit = relativeMatch[2].toLowerCase();
+  
+      const msMap: Record<string, number> = {
+        s: 1000,
+        m: 60 * 1000,
+        h: 60 * 60 * 1000,
+        d: 24 * 60 * 60 * 1000,
+        w: 7 * 24 * 60 * 60 * 1000
+      };
+  
+      const msAgo = value * msMap[unit];
+      const postTime = new Date(now.getTime() - msAgo);
+      return postTime >= cutoff;
     }
-
-    // Case 2: Full date with year (e.g., "February 22, 2024" or "2024-02-22")
-    const parsedDate = new Date(lastPosted);
-    if (!isNaN(parsedDate.getTime()) && /\d{4}/.test(lastPosted)) {
-        return parsedDate >= cutoff;
+  
+    // Case 2: Format like "March 30 at 7:50 AM"
+    const dateTimeMatch = lastPosted.match(/^([A-Za-z]+ \d{1,2}) at/);
+    if (dateTimeMatch) {
+      const dateString = `${dateTimeMatch[1]} ${now.getFullYear()}`; // assume current year
+      const parsedDate = new Date(dateString);
+      return parsedDate >= cutoff;
     }
-
-    // Case 3: Month and day only (e.g., "February 22")
-    const noYearMatch = lastPosted.match(/^[A-Za-z]+\s+\d{1,2}$/);
-    if (noYearMatch) {
-        // ✅ As per your instruction: If no year is included, we assume it's active
-        return true;
+  
+    // Case 3: Format like "March 30"
+    const monthDayMatch = lastPosted.match(/^[A-Za-z]+ \d{1,2}$/);
+    if (monthDayMatch) {
+      const dateString = `${lastPosted} ${now.getFullYear()}`; // assume current year
+      const parsedDate = new Date(dateString);
+      return parsedDate >= cutoff;
     }
-
-    // Unknown or unrecognized format – assume inactive
+  
+    // Case 4: Full date with year like "August 18, 2022" => Always Not Active
+    const fullDateMatch = lastPosted.match(/^[A-Za-z]+ \d{1,2}, \d{4}$/);
+    if (fullDateMatch) {
+      return false;
+    }
+  
+    // Anything else, treat as Not Active
     return false;
-}
-
-/**
- * Save failed URLs to a CSV file
- * @param failedLinks - array of failed links
- */
-function saveFailedLinks(failedLinks: string[]) {
-    const header = 'URL\n';
-    const csvContent = failedLinks.map(url => `${url}\n`).join('');
-    fs.writeFileSync('failed_links.csv', header + csvContent, 'utf8');
-    console.log(`📄 Saved ${failedLinks.length} failed links to failed_links.csv`);
-}
+  }
+  
+  
 
 
 /**
@@ -192,13 +208,22 @@ async function main() {
     // Step 2: Setup Puppeteer
     console.log('🚀 Launching browser...');
     const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        headless: false,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--window-size=1920,1080',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+        ],
         defaultViewport: null
     });
 
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...');
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     await page.setJavaScriptEnabled(true);
     await page.setExtraHTTPHeaders({
         'Accept-Language': 'en-US,en;q=0.9',
@@ -262,6 +287,12 @@ async function main() {
     saveFailedLinks(failedLinks);
 
 }
-
+// The function to save failed links to a CSV
+function saveFailedLinks(failedLinks: string[]) {
+    const header = 'URL\n';
+    const csvContent = failedLinks.map(url => `${url}\n`).join('');
+    fs.writeFileSync('failed_links.csv', header + csvContent, 'utf8');
+    console.log(`📄 Saved ${failedLinks.length} failed links to failed_links.csv`);
+}
 
 main();
