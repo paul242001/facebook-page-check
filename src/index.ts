@@ -107,6 +107,9 @@ async function analyzePage(page: Page, url: string) {
         };
     }
 }
+
+
+
 function isPostRecent(lastPosted: string): boolean {
     const now = new Date();
     const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
@@ -157,6 +160,7 @@ function isPostRecent(lastPosted: string): boolean {
     // Anything else, treat as Not Active
     return false;
   }
+  
   
   
 

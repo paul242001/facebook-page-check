@@ -2,6 +2,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@types/puppeteer": "^5.4.7",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "name": "facebook-scrape",
