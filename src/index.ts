@@ -484,7 +484,7 @@ async function main() {
         // Apply standard cell style
         row.eachCell((cell, colIndex) => {
             // Special style for the Page Name column
-            if (colIndex === 2) {
+            if (colIndex === 1) {
                 Object.assign(cell, pageNameStyle);
             } else {
                 Object.assign(cell, cellStyle);
