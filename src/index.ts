@@ -230,8 +230,6 @@ async function main() {
         }
     }
     
-    
-
     await browser.close();
     console.log('🛑 Browser closed.');
 
@@ -239,107 +237,155 @@ async function main() {
     console.log('📊 Exporting data to Excel...');
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Facebook Pages');
-// Define styles
-const headerStyle = {
-    font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 },
-    fill: {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF1F4E78' }, // Dark blue
-    },
-    alignment: { vertical: 'middle', horizontal: 'center' },
-    border: {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
-    }
-};
 
-const cellStyle = {
-    alignment: { vertical: 'middle', horizontal: 'center' },
-    border: {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
-    }
-};
-sheet.columns = [
-    { header: 'LINK', key: 'LINK', width: 40 },
-    { header: 'PAGE NAME', key: 'PAGE_NAME', width: 30 },
-    { header: 'FOLLOWERS', key: 'FOLLOWERS', width: 15 },
-    { header: 'PAGE DETAILS', key: 'PAGEDETAILS', width: 25 },
-    { header: 'LAST POSTED', key: 'LAST_POSTED', width: 20 },
-    { header: 'PAGE STATUS', key: 'PAGE_STATUS', width: 15 }
-];
+    const headerStyle = {
+        font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 },
+        fill: {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1F4E78' }, // Dark blue
+        },
+        alignment: { vertical: 'middle', horizontal: 'center' },
+        border: {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+        }
+    };
 
- 
-// Style headers
-sheet.getRow(1).eachCell((cell) => {
-    Object.assign(cell, headerStyle);
-});
+    const cellStyle = {
+        alignment: { vertical: 'middle', horizontal: 'center' },
+        border: {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+        }
+    };
 
-// Add and style rows
-results.forEach((rowData) => {
-    const row = sheet.addRow(rowData);
+    sheet.columns = [
+        { header: 'LINK', key: 'LINK', width: 40 },
+        { header: 'PAGE NAME', key: 'PAGE_NAME', width: 30 },
+        { header: 'FOLLOWERS', key: 'FOLLOWERS', width: 15 },
+        { header: 'PAGE DETAILS', key: 'PAGEDETAILS', width: 25 },
+        { header: 'LAST POSTED', key: 'LAST_POSTED', width: 20 },
+        { header: 'PAGE STATUS', key: 'PAGE_STATUS', width: 15 }
+    ];
 
-    row.eachCell((cell) => {
-        Object.assign(cell, cellStyle);
+    // Style headers
+    sheet.getRow(1).eachCell((cell) => {
+        Object.assign(cell, headerStyle);
     });
 
-    // Highlight status with color
-    const statusCell = row.getCell('PAGE_STATUS');
-    if (rowData.PAGE_STATUS === 'Active') {
-        statusCell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF92D050' } // green
-        };
-        
-    } else if (rowData.PAGE_STATUS === 'Not Active') {
-        statusCell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFFF5C5C' } // red
-        };
-    }
-});
+    // Add and style rows
+    results.forEach((rowData) => {
+        const row = sheet.addRow(rowData);
+
+        row.eachCell((cell) => {
+            Object.assign(cell, cellStyle);
+        });
+
+        // Highlight status with color
+        const statusCell = row.getCell('PAGE_STATUS');
+        if (rowData.PAGE_STATUS === 'Active') {
+            statusCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF92D050' } // green
+            };
+        } else if (rowData.PAGE_STATUS === 'Not Active') {
+            statusCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFF5C5C' } // red
+            };
+        }
+    });
 
     const now = new Date();
 
     // Helper to pad numbers
     const pad = (n: number) => n.toString().padStart(2, '0');
-    
+
     // Get date parts
     const month = pad(now.getMonth() + 1);
     const day = pad(now.getDate());
     const year = now.getFullYear();
-    
+
     // Get time parts
     let hours = now.getHours();
     const minutes = pad(now.getMinutes());
     const isAM = hours < 12;
-    
+
     if (hours === 0) hours = 12; // midnight case
     else if (hours > 12) hours -= 12; // convert to 12-hour format
-    
+
     const formattedTime = `${pad(hours)}-${minutes}${isAM ? 'am' : 'pm'}`;
     const formattedDateTime = `${month}-${day}-${year}_${formattedTime}`;
-    
+
     // Set file name
     const fileName = `FacebookPages_${formattedDateTime}.xlsx`;
-    
+
     // Save the Excel file
     await workbook.xlsx.writeFile(fileName);
     console.log(`✅ Excel file created: ${fileName}`);
-    
-    
+
+    // After exporting, remove rows with 'N/A' and move them to a new file
+    const rowsWithNA = results.filter(row => 
+        Object.values(row).some(value => value === 'N/A' || value === 'Error')
+    );
+
+    const rowsWithoutNA = results.filter(row => 
+        !Object.values(row).some(value => value === 'N/A' || value === 'Error')
+    );
+
+    // Create a new workbook for the rows with 'N/A'
+    const failedWorkbook = new ExcelJS.Workbook();
+    const failedSheet = failedWorkbook.addWorksheet('Failed Facebook Pages');
+
+    // Define headers for the failed file (same as the original)
+    failedSheet.columns = sheet.columns;
+
+    // Add the failed rows
+    rowsWithNA.forEach((rowData) => {
+        const row = failedSheet.addRow(rowData);
+
+        row.eachCell((cell) => {
+            Object.assign(cell, cellStyle);
+        });
+    });
+
+    // Set the failed file name
+    const failedFileName = `FailedFacebookPages_${formattedDateTime}.xlsx`;
+
+    // Save the failed Excel file
+    await failedWorkbook.xlsx.writeFile(failedFileName);
+    console.log(`✅ Failed rows saved in: ${failedFileName}`);
+
+    // Now update the original file to only include rows without 'N/A'
+    const updatedWorkbook = new ExcelJS.Workbook();
+    const updatedSheet = updatedWorkbook.addWorksheet('Facebook Pages');
+
+    updatedSheet.columns = sheet.columns;
+
+    // Add rows without 'N/A'
+    rowsWithoutNA.forEach((rowData) => {
+        const row = updatedSheet.addRow(rowData);
+
+        row.eachCell((cell) => {
+            Object.assign(cell, cellStyle);
+        });
+    });
+
+    // Save the updated file without 'N/A' rows
+    await updatedWorkbook.xlsx.writeFile(fileName);
+    console.log(`✅ Updated Excel file created: ${fileName}`);
 
     await saveFailedLinks(failedLinks);
-
 }
-// The function to save failed links to a CSV
+
+// Function to save failed links to a CSV
 async function saveFailedLinks(failedLinks: string[]) {
     const header = 'URL\n';
     const csvContent = failedLinks.map(url => `"${url.replace(/"/g, '""')}"`).join('\n');
@@ -347,5 +393,6 @@ async function saveFailedLinks(failedLinks: string[]) {
     console.log(`📄 Saved ${failedLinks.length} failed links to failed_links.csv`);
 }
 
-
 main();
+
+
