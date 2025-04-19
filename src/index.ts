@@ -111,55 +111,25 @@ async function analyzePage(page: Page, url: string) {
 
 
 function isPostRecent(lastPosted: string): boolean {
-    const now = new Date();
-    const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+    const trimmed = lastPosted.trim().toLowerCase();
   
-    lastPosted = lastPosted.trim();
-  
-    // Case 1: Relative times like "3d", "4h", "15m"
-    const relativeMatch = lastPosted.match(/^(\d+)([smhdw])$/i);
-    if (relativeMatch) {
-      const value = parseInt(relativeMatch[1]);
-      const unit = relativeMatch[2].toLowerCase();
-  
-      const msMap: Record<string, number> = {
-        s: 1000,
-        m: 60 * 1000,
-        h: 60 * 60 * 1000,
-        d: 24 * 60 * 60 * 1000,
-        w: 7 * 24 * 60 * 60 * 1000
-      };
-  
-      const msAgo = value * msMap[unit];
-      const postTime = new Date(now.getTime() - msAgo);
-      return postTime >= cutoff;
-    }
-  
-    // Case 2: Format like "March 30 at 7:50 AM"
-    const dateTimeMatch = lastPosted.match(/^([A-Za-z]+ \d{1,2}) at/);
-    if (dateTimeMatch) {
-      const dateString = `${dateTimeMatch[1]} ${now.getFullYear()}`; // assume current year
-      const parsedDate = new Date(dateString);
-      return parsedDate >= cutoff;
-    }
-  
-    // Case 3: Format like "March 30"
-    const monthDayMatch = lastPosted.match(/^[A-Za-z]+ \d{1,2}$/);
-    if (monthDayMatch) {
-      const dateString = `${lastPosted} ${now.getFullYear()}`; // assume current year
-      const parsedDate = new Date(dateString);
-      return parsedDate >= cutoff;
-    }
-  
-    // Case 4: Full date with year like "August 18, 2022" => Always Not Active
-    const fullDateMatch = lastPosted.match(/^[A-Za-z]+ \d{1,2}, \d{4}$/);
-    if (fullDateMatch) {
+    // ❌ Case 1: If it's N/A or empty
+    if (!trimmed || trimmed === 'n/a') {
       return false;
     }
   
-    // Anything else, treat as Not Active
-    return false;
+    // ❌ Case 2: If it contains a year (4-digit number)
+    if (/\d{4}/.test(trimmed)) {
+      return false;
+    }
+  
+    // ✅ All other formats (like "March 2", "17h", etc.) are considered Active
+    return true;
   }
+  
+  
+  
+  
   
   
   
