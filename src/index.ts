@@ -281,8 +281,15 @@ async function main() {
         }
     });
 
-    await workbook.xlsx.writeFile('FacebookPages.xlsx');
-    console.log('✅ Excel file created: FacebookPages.xlsx');
+    const now = new Date();
+    const formattedDateTime = now.toISOString().replace(/T/, '_').replace(/:/g, '-').replace(/\..+/, '');
+    
+    // Example result: 2025-04-19_14-25-30
+    const fileName = `FacebookPages_${formattedDateTime}.xlsx`;
+    
+    await workbook.xlsx.writeFile(fileName);
+    console.log(`✅ Excel file created: ${fileName}`);
+    
 
     saveFailedLinks(failedLinks);
 
