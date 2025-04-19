@@ -12,7 +12,7 @@ const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random
 async function analyzePage(page: Page, url: string) {
     console.log(`🔍 Analyzing: ${url}`);
     try {
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 100000 });
 
         // Try to close login dialog if it appears
         try {
@@ -24,6 +24,10 @@ async function analyzePage(page: Page, url: string) {
         }
 
         await randomDelay();
+
+
+        // ========== Add Random Scroll (Up/Down) ========== 
+        await randomScroll(page);
 
         // ========== Extract Page Name ==========
         let pageName = 'N/A';
@@ -108,7 +112,27 @@ async function analyzePage(page: Page, url: string) {
     }
 }
 
+// Random Scroll Function
+async function randomScroll(page: Page) {
+    const scrollTimes = 5; // Number of scrolls (10 scrolls)
+    const minScrollDelay = 1000; // Minimum delay between scrolls (2 seconds)
+    const maxScrollDelay = 2000; // Maximum delay between scrolls (5 seconds)
 
+    for (let i = 0; i < scrollTimes; i++) {
+        const direction = Math.random() > 0.5 ? 1 : -1; // Random direction: up or down
+        const distance = Math.floor(Math.random() * 300) + 100; // Scroll distance (100px to 400px)
+
+        await page.evaluate((direction, distance) => {
+            window.scrollBy({
+                top: direction * distance,
+                behavior: 'smooth'
+            });
+        }, direction, distance);
+
+        const delay = Math.floor(Math.random() * (maxScrollDelay - minScrollDelay) + minScrollDelay);
+        await new Promise(resolve => setTimeout(resolve, delay));
+    }
+}
 
 function isPostRecent(lastPosted: string): boolean {
     const trimmed = lastPosted.trim().toLowerCase();
@@ -239,13 +263,48 @@ async function main() {
     const sheet = workbook.addWorksheet('Facebook Pages');
 
     const headerStyle = {
-        font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 },
+        font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 14, name: 'Calibri' },
+        fill: {
+            type: 'gradient',
+            gradient: 'angle',
+            stops: [
+                { position: 0, color: { argb: 'FF1F4E78' } }, // Dark blue
+                { position: 1, color: { argb: 'FF3E73A8' } }, // Light blue gradient
+            ],
+        },
+        alignment: { vertical: 'middle', horizontal: 'center', wrapText: true },
+        border: {
+            top: { style: 'thick', color: { argb: 'FF000000' } },
+            left: { style: 'thick', color: { argb: 'FF000000' } },
+            bottom: { style: 'thick', color: { argb: 'FF000000' } },
+            right: { style: 'thick', color: { argb: 'FF000000' } }
+        }
+    };
+    
+    const cellStyle = {
+        alignment: { vertical: 'middle', horizontal: 'center', wrapText: true },
+        font: { name: 'Calibri', size: 12 },
+        border: {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+        }
+    };
+    
+    // Add shading to every other row to improve readability
+    const alternatingRowStyle = {
         fill: {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FF1F4E78' }, // Dark blue
-        },
-        alignment: { vertical: 'middle', horizontal: 'center' },
+            fgColor: { argb: 'FFF2F2F2' } // Light gray background for alternating rows
+        }
+    };
+    
+    // Apply larger, bold fonts to page names and important columns
+    const pageNameStyle = {
+        font: { bold: true, size: 13 },
+        alignment: { vertical: 'middle', horizontal: 'center', wrapText: true },
         border: {
             top: { style: 'thin' },
             left: { style: 'thin' },
@@ -253,40 +312,44 @@ async function main() {
             right: { style: 'thin' }
         }
     };
-
-    const cellStyle = {
-        alignment: { vertical: 'middle', horizontal: 'center' },
-        border: {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
-        }
-    };
-
+    
+    // Styling the header row
     sheet.columns = [
-        { header: 'LINK', key: 'LINK', width: 40 },
-        { header: 'PAGE NAME', key: 'PAGE_NAME', width: 30 },
-        { header: 'FOLLOWERS', key: 'FOLLOWERS', width: 15 },
-        { header: 'PAGE DETAILS', key: 'PAGEDETAILS', width: 25 },
-        { header: 'LAST POSTED', key: 'LAST_POSTED', width: 20 },
-        { header: 'PAGE STATUS', key: 'PAGE_STATUS', width: 15 }
+        { header: 'Link', key: 'LINK', width: 50, outlineLevel: 1 },
+        { header: 'Page Name', key: 'PAGE_NAME', width: 40, outlineLevel: 1 },
+        { header: 'Followers', key: 'FOLLOWERS', width: 20, outlineLevel: 1 },
+        { header: 'Page Details', key: 'PAGEDETAILS', width: 30, outlineLevel: 1 },
+        { header: 'Last Posted', key: 'LAST_POSTED', width: 25, outlineLevel: 1 },
+        { header: 'Page Status', key: 'PAGE_STATUS', width: 20, outlineLevel: 1 }
     ];
-
-    // Style headers
+    
+    // Apply header style
     sheet.getRow(1).eachCell((cell) => {
         Object.assign(cell, headerStyle);
     });
-
-    // Add and style rows
-    results.forEach((rowData) => {
+    
+    // Add the rows with alternating row styles and custom cell styling
+    results.forEach((rowData, rowIndex) => {
         const row = sheet.addRow(rowData);
-
-        row.eachCell((cell) => {
-            Object.assign(cell, cellStyle);
+    
+        // Apply alternating row color style
+        if (rowIndex % 2 === 0) {
+            row.eachCell((cell) => {
+                Object.assign(cell, alternatingRowStyle);
+            });
+        }
+    
+        // Apply standard cell style
+        row.eachCell((cell, colIndex) => {
+            // Special style for the Page Name column
+            if (colIndex === 2) {
+                Object.assign(cell, pageNameStyle);
+            } else {
+                Object.assign(cell, cellStyle);
+            }
         });
-
-        // Highlight status with color
+    
+        // Highlight status with colors
         const statusCell = row.getCell('PAGE_STATUS');
         if (rowData.PAGE_STATUS === 'Active') {
             statusCell.fill = {
