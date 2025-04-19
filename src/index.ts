@@ -123,6 +123,11 @@ function isPostRecent(lastPosted: string): boolean {
       return false;
     }
   
+    // ❌ Case 3: If the string contains no number (invalid)
+    if (!/\d/.test(trimmed)) {
+      return false;
+    }
+  
     // ✅ All other formats (like "March 2", "17h", etc.) are considered Active
     return true;
   }
@@ -291,6 +296,7 @@ results.forEach((rowData) => {
             pattern: 'solid',
             fgColor: { argb: 'FF92D050' } // green
         };
+        
     } else if (rowData.PAGE_STATUS === 'Not Active') {
         statusCell.fill = {
             type: 'pattern',
@@ -330,15 +336,16 @@ results.forEach((rowData) => {
     
     
 
-    saveFailedLinks(failedLinks);
+    await saveFailedLinks(failedLinks);
 
 }
 // The function to save failed links to a CSV
-function saveFailedLinks(failedLinks: string[]) {
+async function saveFailedLinks(failedLinks: string[]) {
     const header = 'URL\n';
-    const csvContent = failedLinks.map(url => `${url}\n`).join('');
-    fs.writeFileSync('failed_links.csv', header + csvContent, 'utf8');
+    const csvContent = failedLinks.map(url => `"${url.replace(/"/g, '""')}"`).join('\n');
+    await fs.promises.writeFile('failed_links.csv', header + csvContent + '\n', 'utf8');
     console.log(`📄 Saved ${failedLinks.length} failed links to failed_links.csv`);
 }
+
 
 main();
