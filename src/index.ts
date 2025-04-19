@@ -264,26 +264,71 @@ async function main() {
     console.log('📊 Exporting data to Excel...');
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Facebook Pages');
+// Define styles
+const headerStyle = {
+    font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 },
+    fill: {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1F4E78' }, // Dark blue
+    },
+    alignment: { vertical: 'middle', horizontal: 'center' },
+    border: {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    }
+};
 
-    sheet.columns = [
-        { header: 'LINK', key: 'LINK', width: 35 },
-        { header: 'PAGE NAME', key: 'PAGE_NAME', width: 30 },
-        { header: 'FOLLOWERS', key: 'FOLLOWERS', width: 15 },
-        { header: 'PAGEDETAILS', key: 'PAGEDETAILS', width: 25 },
-        { header: 'LAST POSTED', key: 'LAST_POSTED', width: 25 },
-        { header: 'PAGE STATUS', key: 'PAGE_STATUS', width: 15 }
-    ];
+const cellStyle = {
+    alignment: { vertical: 'middle', horizontal: 'center' },
+    border: {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+    }
+};
+sheet.columns = [
+    { header: 'LINK', key: 'LINK', width: 40 },
+    { header: 'PAGE NAME', key: 'PAGE_NAME', width: 30 },
+    { header: 'FOLLOWERS', key: 'FOLLOWERS', width: 15 },
+    { header: 'PAGE DETAILS', key: 'PAGEDETAILS', width: 25 },
+    { header: 'LAST POSTED', key: 'LAST_POSTED', width: 20 },
+    { header: 'PAGE STATUS', key: 'PAGE_STATUS', width: 15 }
+];
 
-    results.forEach(row => {
-        const excelRow = sheet.addRow(row);
-        if (row.PAGE_STATUS === 'Not Active') {
-            excelRow.getCell('PAGE_STATUS').fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFFF0000' } // red
-            };
-        }
+ 
+// Style headers
+sheet.getRow(1).eachCell((cell) => {
+    Object.assign(cell, headerStyle);
+});
+
+// Add and style rows
+results.forEach((rowData) => {
+    const row = sheet.addRow(rowData);
+
+    row.eachCell((cell) => {
+        Object.assign(cell, cellStyle);
     });
+
+    // Highlight status with color
+    const statusCell = row.getCell('PAGE_STATUS');
+    if (rowData.PAGE_STATUS === 'Active') {
+        statusCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF92D050' } // green
+        };
+    } else if (rowData.PAGE_STATUS === 'Not Active') {
+        statusCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFF5C5C' } // red
+        };
+    }
+});
 
     const now = new Date();
 
