@@ -282,13 +282,33 @@ async function main() {
     });
 
     const now = new Date();
-    const formattedDateTime = now.toISOString().replace(/T/, '_').replace(/:/g, '-').replace(/\..+/, '');
+
+    // Helper to pad numbers
+    const pad = (n: number) => n.toString().padStart(2, '0');
     
-    // Example result: 2025-04-19_14-25-30
+    // Get date parts
+    const month = pad(now.getMonth() + 1);
+    const day = pad(now.getDate());
+    const year = now.getFullYear();
+    
+    // Get time parts
+    let hours = now.getHours();
+    const minutes = pad(now.getMinutes());
+    const isAM = hours < 12;
+    
+    if (hours === 0) hours = 12; // midnight case
+    else if (hours > 12) hours -= 12; // convert to 12-hour format
+    
+    const formattedTime = `${pad(hours)}-${minutes}${isAM ? 'am' : 'pm'}`;
+    const formattedDateTime = `${month}-${day}-${year}_${formattedTime}`;
+    
+    // Set file name
     const fileName = `FacebookPages_${formattedDateTime}.xlsx`;
     
+    // Save the Excel file
     await workbook.xlsx.writeFile(fileName);
     console.log(`✅ Excel file created: ${fileName}`);
+    
     
 
     saveFailedLinks(failedLinks);
