@@ -87,20 +87,31 @@ async function analyzePage(page: Page, url: string) {
         }
         // ========== Extract Social Media Links by Platform ==========
         let location = '';
-        try {
-            // Try to get location from meta tags or page content
-            location = await page.$eval('meta[property="place:location"]', el => el.getAttribute('content') || '') ?? '';
-        
-            // As fallback, try to grab any text that seems like an address
-            if (!location) {
-                const bodyText = await page.evaluate(() => document.body.innerText);
-                const match = bodyText.match(/\d{1,5}\s\w+(\s\w+)*,\s\w+,\s\w+/); // Rough address pattern
-                location = match ? match[0] : '';
-            }
-        } catch (err) {
-            location = '';
-        }
 
+        try {
+            // Wait for any span with dir="auto" to load (in case it's a location)
+            await page.waitForSelector('span[dir="auto"]', { timeout: 5000 });
+        
+            // Get all text contents from span[dir="auto"]
+            const spanTexts = await page.$$eval('span[dir="auto"]', spans =>
+                spans.map(span => span.textContent?.trim() || '')
+            );
+        
+            // Find a text that looks like a location (e.g., "City, Country")
+            location = spanTexts.find(text =>
+                /^[A-Za-z\s]+,\s?[A-Za-z\s]+$/.test(text) && text.length <= 50
+            ) || 'N/A';
+        
+        } catch (err) {
+            // If any error occurs, default to 'N/A'
+            console.error('❌ Failed to extract location:', err);
+            location = 'N/A';
+        }
+        
+        console.log('📍 Extracted Location:', location);
+        
+        
+        
 
 
         let email = '';
@@ -133,18 +144,38 @@ async function analyzePage(page: Page, url: string) {
             username = '';
         }
         
+        // ========== Extract all anchor tags with hrefs ==========
+        const links = await page.$$eval('a', as => as.map(a => a.href));
 
+        // ========== Get social media links ==========
+        const baseUrl = page.url();  // Get the base URL of the page for relative URLs
+        let instagram = cleanSocialLink(
+            links.find(link => link.includes('instagram.com')) || '',
+            'instagram',
+            baseUrl
+        );
+        let tiktok = cleanSocialLink(
+            links.find(link => link.includes('tiktok.com')) || '',
+            'tiktok',
+            baseUrl
+        );
+        let youtube = cleanSocialLink(
+            links.find(link => link.includes('youtube.com')) || '',
+            'youtube',
+            baseUrl
+        );
+        let twitter = cleanSocialLink(
+            links.find(link => link.includes('twitter.com') || link.includes('x.com')) || '',
+            'x',
+            baseUrl
+        );
 
-
-        let instagram = '';
-        let tiktok = '';
-        let youtube = '';
-        let twitter = '';
+        // Try to get the links if they weren't found earlier
         try {
             const allLinks = await page.$$eval('a[href]', anchors =>
                 anchors.map(a => a.href.toLowerCase())
             );
-        
+
             for (const link of allLinks) {
                 if (!instagram && link.includes('instagram.com')) instagram = link;
                 if (!tiktok && link.includes('tiktok.com')) tiktok = link;
@@ -154,6 +185,11 @@ async function analyzePage(page: Page, url: string) {
         } catch (err) {
             // Leave blank if error occurs
         }
+        
+
+
+
+
         // ========== Determine Page Status ==========
         const isActive = isPostRecent(lastPosted);
         const pageStatus = isActive ? 'Active' : 'Not Active';
@@ -188,6 +224,23 @@ async function analyzePage(page: Page, url: string) {
         };
     }
 }
+function cleanSocialLink(link: string, platform: string, baseUrl: string): string {
+    if (link.startsWith('/')) {
+        // Handle relative URLs by appending the base URL
+        link = new URL(link, baseUrl).href;
+    }
+
+    // If the link is obfuscated (e.g., starts with '@l.php'), you might want to clean it
+    if (link.includes('@l.php')) {
+        // Extract the actual URL, or you can try to process the obfuscated link here
+        // For now, just return an empty string if it's obfuscated
+        console.warn(`Obfuscated link found for ${platform}: ${link}`);
+        return '';
+    }
+
+    return link;
+}
+
 
 // Random Scroll Function
 async function randomScroll(page: Page) {
@@ -262,49 +315,7 @@ function convertFollowers(value: string): string {
             return Math.round(number).toString();
     }
 }
-function cleanSocialLink(link: string, platform: string): string {
-    if (!link) return '';
 
-    try {
-        const url = new URL(link);
-
-        // Remove query params & fragments
-        url.search = '';
-        url.hash = '';
-
-        // Keep only base platform domain + pathname
-        switch (platform) {
-            case 'instagram':
-                if (url.hostname.includes('instagram.com')) {
-                    const username = url.pathname.split('/').filter(Boolean)[0];
-                    return `https://instagram.com/${username}`;
-                }
-                break;
-            case 'tiktok':
-                if (url.hostname.includes('tiktok.com')) {
-                    const username = url.pathname.split('@')[1]?.split('/')[0];
-                    return username ? `https://www.tiktok.com/@${username}` : '';
-                }
-                break;
-            case 'youtube':
-                if (url.hostname.includes('youtube.com')) {
-                    const path = url.pathname.startsWith('/@') ? url.pathname : url.pathname.split('/').slice(0, 2).join('/');
-                    return `https://www.youtube.com${path}`;
-                }
-                break;
-            case 'x':
-                if (url.hostname.includes('twitter.com') || url.hostname.includes('x.com')) {
-                    const username = url.pathname.split('/').filter(Boolean)[0];
-                    return `https://x.com/${username}`;
-                }
-                break;
-        }
-
-        return url.origin + url.pathname;
-    } catch (err) {
-        return link;
-    }
-}
 
 
 
