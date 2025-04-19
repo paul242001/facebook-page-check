@@ -376,86 +376,33 @@ async function main() {
     const day = pad(now.getDate());
     const year = now.getFullYear();
 
-    // Get time parts
-    let hours = now.getHours();
-    const minutes = pad(now.getMinutes());
-    const isAM = hours < 12;
-
-    if (hours === 0) hours = 12; // midnight case
-    else if (hours > 12) hours -= 12; // convert to 12-hour format
-
-    const formattedTime = `${pad(hours)}-${minutes}${isAM ? 'am' : 'pm'}`;
-    const formattedDateTime = `${month}-${day}-${year}_${formattedTime}`;
-
-    // Set file name
-    const fileName = `FacebookPages_${formattedDateTime}.xlsx`;
-
-    // Save the Excel file
-    await workbook.xlsx.writeFile(fileName);
-    console.log(`✅ Excel file created: ${fileName}`);
-
-    // After exporting, remove rows with 'N/A' and move them to a new file
-    const rowsWithNA = results.filter(row => 
-        Object.values(row).some(value => value === 'N/A' || value === 'Error')
-    );
-
-    const rowsWithoutNA = results.filter(row => 
-        !Object.values(row).some(value => value === 'N/A' || value === 'Error')
-    );
-
-    // Create a new workbook for the rows with 'N/A'
-    const failedWorkbook = new ExcelJS.Workbook();
-    const failedSheet = failedWorkbook.addWorksheet('Failed Facebook Pages');
-
-    // Define headers for the failed file (same as the original)
-    failedSheet.columns = sheet.columns;
-
-    // Add the failed rows
-    rowsWithNA.forEach((rowData) => {
-        const row = failedSheet.addRow(rowData);
-
-        row.eachCell((cell) => {
-            Object.assign(cell, cellStyle);
-        });
-    });
-
-    // Set the failed file name
-    const failedFileName = `FailedFacebookPages_${formattedDateTime}.xlsx`;
-
-    // Save the failed Excel file
-    await failedWorkbook.xlsx.writeFile(failedFileName);
-    console.log(`✅ Failed rows saved in: ${failedFileName}`);
-
-    // Now update the original file to only include rows without 'N/A'
-    const updatedWorkbook = new ExcelJS.Workbook();
-    const updatedSheet = updatedWorkbook.addWorksheet('Facebook Pages');
-
-    updatedSheet.columns = sheet.columns;
-
-    // Add rows without 'N/A'
-    rowsWithoutNA.forEach((rowData) => {
-        const row = updatedSheet.addRow(rowData);
-
-        row.eachCell((cell) => {
-            Object.assign(cell, cellStyle);
-        });
-    });
-
-    // Save the updated file without 'N/A' rows
-    await updatedWorkbook.xlsx.writeFile(fileName);
-    console.log(`✅ Updated Excel file created: ${fileName}`);
-
-    await saveFailedLinks(failedLinks);
-}
-
-// Function to save failed links to a CSV
-async function saveFailedLinks(failedLinks: string[]) {
-    const header = 'URL\n';
-    const csvContent = failedLinks.map(url => `"${url.replace(/"/g, '""')}"`).join('\n');
-    await fs.promises.writeFile('failed_links.csv', header + csvContent + '\n', 'utf8');
-    console.log(`📄 Saved ${failedLinks.length} failed links to failed_links.csv`);
-}
-
-main();
-
-
+     // Get time parts
+     let hours = now.getHours();
+     const minutes = pad(now.getMinutes());
+     const seconds = pad(now.getSeconds());
+     const ampm = hours >= 12 ? 'PM' : 'AM';
+     hours = hours % 12 || 12;
+ 
+     // Format filename with timestamp
+     const timestamp = `${month}-${day}-${year}_${pad(hours)}-${minutes}-${seconds}_${ampm}`;
+     const fileName = `Facebook_Pages_${timestamp}.xlsx`;
+ 
+     // Save the workbook
+     await workbook.xlsx.writeFile(fileName);
+     console.log(`✅ Excel file saved as: ${fileName}`);
+ 
+     // Step 5: Log failed links (if any)
+     if (failedLinks.length > 0) {
+         console.log(`⚠️ ${failedLinks.length} pages failed to analyze. Writing to failed_links.txt...`);
+         fs.writeFileSync('failed_links.txt', failedLinks.join('\n'), 'utf-8');
+     } else {
+         console.log('🎉 All pages processed successfully without errors.');
+     }
+ 
+     console.log('🏁 Done.');
+ }
+ 
+ main().catch(err => {
+     console.error('❌ Unexpected error in main():', err);
+ });
+ 
