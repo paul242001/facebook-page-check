@@ -85,7 +85,75 @@ async function analyzePage(page: Page, url: string) {
         } catch (err) {
             console.warn(`⚠️ Last posted date not found for: ${url}`);
         }
+        // ========== Extract Social Media Links by Platform ==========
+        let location = '';
+        try {
+            // Try to get location from meta tags or page content
+            location = await page.$eval('meta[property="place:location"]', el => el.getAttribute('content') || '') ?? '';
+        
+            // As fallback, try to grab any text that seems like an address
+            if (!location) {
+                const bodyText = await page.evaluate(() => document.body.innerText);
+                const match = bodyText.match(/\d{1,5}\s\w+(\s\w+)*,\s\w+,\s\w+/); // Rough address pattern
+                location = match ? match[0] : '';
+            }
+        } catch (err) {
+            location = '';
+        }
 
+
+
+        let email = '';
+        try {
+            // Find email using regex search in full text
+            const pageText = await page.evaluate(() => document.body.innerText);
+            const emailMatch = pageText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            email = emailMatch ? emailMatch[0] : '';
+        } catch (err) {
+            email = '';
+        }
+        let username = '';
+
+        try {
+            // Try Open Graph meta tag first
+            username = await page.$eval('meta[property="og:title"]', el => el.getAttribute('content') || '') ?? '';
+        
+            // Fallback to page title if username is still empty
+            if (!username) {
+                username = await page.title();
+            }
+        
+            // Optional: Clean username if it's like "Page Name | Something"
+            if (username.includes('|')) {
+                username = username.split('|')[0].trim();
+            } else if (username.includes('-')) {
+                username = username.split('-')[0].trim();
+            }
+        } catch (err) {
+            username = '';
+        }
+        
+
+
+
+        let instagram = '';
+        let tiktok = '';
+        let youtube = '';
+        let twitter = '';
+        try {
+            const allLinks = await page.$$eval('a[href]', anchors =>
+                anchors.map(a => a.href.toLowerCase())
+            );
+        
+            for (const link of allLinks) {
+                if (!instagram && link.includes('instagram.com')) instagram = link;
+                if (!tiktok && link.includes('tiktok.com')) tiktok = link;
+                if (!youtube && link.includes('youtube.com')) youtube = link;
+                if (!twitter && link.includes('twitter.com')) twitter = link;
+            }
+        } catch (err) {
+            // Leave blank if error occurs
+        }
         // ========== Determine Page Status ==========
         const isActive = isPostRecent(lastPosted);
         const pageStatus = isActive ? 'Active' : 'Not Active';
@@ -93,12 +161,21 @@ async function analyzePage(page: Page, url: string) {
         console.log(`✅ Done analyzing: ${url}`);
         return {
             LINK: url,
+            USERNAME: username,
             PAGE_NAME: pageName,
             FOLLOWERS: followers,
             PAGEDETAILS: category,
             LAST_POSTED: lastPosted,
+            LOCATION: location,
+            EMAIL_URL: email,
+            INSTAGRAM_URL: instagram,
+            TIKTOK_URL: tiktok,
+            YOUTUBE_URL: youtube,
+            X_URL: twitter,
             PAGE_STATUS: pageStatus
+
         };
+        
     } catch (err) {
         console.error(`❌ Failed to analyze ${url}:`, err);
         return {
@@ -185,10 +262,55 @@ function convertFollowers(value: string): string {
             return Math.round(number).toString();
     }
 }
+function cleanSocialLink(link: string, platform: string): string {
+    if (!link) return '';
+
+    try {
+        const url = new URL(link);
+
+        // Remove query params & fragments
+        url.search = '';
+        url.hash = '';
+
+        // Keep only base platform domain + pathname
+        switch (platform) {
+            case 'instagram':
+                if (url.hostname.includes('instagram.com')) {
+                    const username = url.pathname.split('/').filter(Boolean)[0];
+                    return `https://instagram.com/${username}`;
+                }
+                break;
+            case 'tiktok':
+                if (url.hostname.includes('tiktok.com')) {
+                    const username = url.pathname.split('@')[1]?.split('/')[0];
+                    return username ? `https://www.tiktok.com/@${username}` : '';
+                }
+                break;
+            case 'youtube':
+                if (url.hostname.includes('youtube.com')) {
+                    const path = url.pathname.startsWith('/@') ? url.pathname : url.pathname.split('/').slice(0, 2).join('/');
+                    return `https://www.youtube.com${path}`;
+                }
+                break;
+            case 'x':
+                if (url.hostname.includes('twitter.com') || url.hostname.includes('x.com')) {
+                    const username = url.pathname.split('/').filter(Boolean)[0];
+                    return `https://x.com/${username}`;
+                }
+                break;
+        }
+
+        return url.origin + url.pathname;
+    } catch (err) {
+        return link;
+    }
+}
+
 
 
 async function main() {
     const links: string[] = [];
+    
 
     // Step 1: Read from CSV
     console.log('📥 Reading CSV file...');
@@ -315,13 +437,22 @@ async function main() {
     
     // Styling the header row
     sheet.columns = [
-        { header: 'Link', key: 'LINK', width: 50, outlineLevel: 1 },
-        { header: 'Page Name', key: 'PAGE_NAME', width: 40, outlineLevel: 1 },
-        { header: 'Followers', key: 'FOLLOWERS', width: 20, outlineLevel: 1 },
-        { header: 'Page Details', key: 'PAGEDETAILS', width: 30, outlineLevel: 1 },
-        { header: 'Last Posted', key: 'LAST_POSTED', width: 25, outlineLevel: 1 },
-        { header: 'Page Status', key: 'PAGE_STATUS', width: 20, outlineLevel: 1 }
+        { header: 'PAGE NAME', key: 'PAGE_NAME', width: 40, outlineLevel: 1 },
+        { header: 'USERNAME', key: 'USERNAME', width: 30 },
+        { header: 'LINK', key: 'LINK', width: 50, outlineLevel: 1 },
+        { header: 'TOTAL FOLLOWERS', key: 'FOLLOWERS', width: 20, outlineLevel: 1 },
+        { header: 'CLASSIFICATION', key: 'PAGEDETAILS', width: 30, outlineLevel: 1 },
+        { header: 'LOCATION', key: 'LOCATION', width: 40 },
+        { header: 'EMAIL URL', key: 'EMAIL_URL', width: 35 },
+        { header: 'INSTAGRAM URL', key: 'INSTAGRAM_URL', width: 50 },
+        { header: 'TIKTOK URL', key: 'TIKTOK_URL', width: 50 },
+        { header: 'YOUTUBE URL', key: 'YOUTUBE_URL', width: 50 },
+        { header: 'X URL', key: 'X_URL', width: 50 },
+        { header: 'LAST POSTED', key: 'LAST_POSTED', width: 25, outlineLevel: 1 },
+        { header: 'PAGE STATUS', key: 'PAGE_STATUS', width: 20, outlineLevel: 1 }
+
     ];
+    
     
     // Apply header style
     sheet.getRow(1).eachCell((cell) => {
