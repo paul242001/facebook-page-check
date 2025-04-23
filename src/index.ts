@@ -126,23 +126,29 @@ async function analyzePage(page: Page, url: string) {
         let username = '';
 
         try {
-            // Try Open Graph meta tag first
-            username = await page.$eval('meta[property="og:title"]', el => el.getAttribute('content') || '') ?? '';
+            const pageUrl = page.url(); // Get the current URL
+            const urlMatch = pageUrl.match(/facebook\.com\/([^/?&]+)/i);
         
-            // Fallback to page title if username is still empty
-            if (!username) {
-                username = await page.title();
+            if (urlMatch && urlMatch[1]) {
+                username = urlMatch[1];
+            } else {
+                // Fallback: check in meta tags or page content if URL doesn't help
+                const html = await page.content();
+        
+                // Try from canonical link
+                const canonicalMatch = html.match(/<link rel="canonical" href="https:\/\/www\.facebook\.com\/([^/?&"]+)/);
+                if (canonicalMatch && canonicalMatch[1]) {
+                    username = canonicalMatch[1];
+                }
             }
         
-            // Optional: Clean username if it's like "Page Name | Something"
-            if (username.includes('|')) {
-                username = username.split('|')[0].trim();
-            } else if (username.includes('-')) {
-                username = username.split('-')[0].trim();
-            }
+            // Optional cleanup if needed
+            username = username.replace(/\/$/, ''); // remove trailing slash
         } catch (err) {
+            console.warn('⚠️ Could not extract real username');
             username = '';
         }
+        
 
         // ========== Extract Contact Number ==========
         let contactNumber = 'N/A';
