@@ -12,7 +12,7 @@ const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random
 async function analyzePage(page: Page, url: string) {
     console.log(`🔍 Analyzing: ${url}`);
     try {// Navigate to the page
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 100000 });
         
         // Check for "Page Not Found" message
         const pageContent = await page.content();
@@ -38,7 +38,7 @@ async function analyzePage(page: Page, url: string) {
         // Try to close login dialog if it appears
         try {
             const closeButtonSelector = 'div[role="dialog"] div[aria-label="Close"]';
-            await page.waitForSelector(closeButtonSelector, { timeout: 10000 });
+            await page.waitForSelector(closeButtonSelector, { timeout: 5000 });
             await page.click(closeButtonSelector);
         } catch (e) {
             // Dialog didn't appear, ignore
@@ -96,30 +96,38 @@ async function analyzePage(page: Page, url: string) {
         }
 
 // ========== Extract Last Posted Date ==========
-let lastPosted = 'N/A';
-let lastPostedDate: Date | null = null;
+let lastPosted: string = 'N/A';                      // Final formatted result (e.g., "March 5, 2025")
+let lastPostedDate: Date | null = null;              // Calculated Date object for last post
 
 try {
-    await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', { timeout: 10000 });
+    // Wait for the first post timestamp span to appear
+    await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', {
+        timeout: 10000,
+    });
 
-    const spanTexts = await page.$$eval('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', els =>
-        els.map(el => el.textContent?.trim())
+    // Grab all visible span texts under the first timeline post
+    const spanTexts = await page.$$eval(
+        'div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]',
+        (elements) => elements.map((el) => el.textContent?.trim())
     );
 
-    const rawTimeAgo = (spanTexts[1] || '').split('·')[0].trim();  // e.g., "3w", "17h", "1d"
+    // Get the raw time-ago string (e.g., "3w", "17h", "1d")
+    const rawTimeAgo = (spanTexts[1] || '').split('·')[0].trim();
     lastPosted = rawTimeAgo;
 
+    // Prepare to calculate date
     const now = new Date();
     const regex = /^(\d+)([smhdw])$/i;
     const match = rawTimeAgo.match(regex);
 
     if (match) {
-        const value = parseInt(match[1]);
-        const unit = match[2].toLowerCase();
+        const value: number = parseInt(match[1]);
+        const unit: string = match[2].toLowerCase();
 
-        // Clone current date
+        // Clone the current time
         lastPostedDate = new Date(now);
 
+        // Adjust date based on time unit
         switch (unit) {
             case 's':
                 lastPostedDate.setSeconds(now.getSeconds() - value);
@@ -134,18 +142,25 @@ try {
                 lastPostedDate.setDate(now.getDate() - value);
                 break;
             case 'w':
-                lastPostedDate.setDate(now.getDate() - (value * 7));
+                lastPostedDate.setDate(now.getDate() - value * 7);
+                break;
+            default:
+                console.warn(`⚠️ Unrecognized time unit: ${unit}`);
                 break;
         }
 
-        // Format to "Month Day" (e.g., "February 22")
-        const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
-        const formattedDate = lastPostedDate.toLocaleDateString('en-US', options);
+        // Format to "Month Day, Year" (e.g., "February 22, 2025")
+        const options: Intl.DateTimeFormatOptions = {
+            month: 'long',
+            day: 'numeric',
+        };
+        const formattedDate: string = lastPostedDate.toLocaleDateString('en-US', options);
 
-        lastPosted = formattedDate + ", 2025";
+        lastPosted = `${formattedDate}, 2025`;
     } else {
         console.log(`📌 Last posted string "${rawTimeAgo}" is in an unrecognized format.`);
     }
+
 
 } catch (err) {
     console.warn(`⚠️ Last posted date not found for: ${url}`);
