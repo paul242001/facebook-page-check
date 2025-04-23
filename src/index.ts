@@ -11,13 +11,34 @@ const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random
 
 async function analyzePage(page: Page, url: string) {
     console.log(`🔍 Analyzing: ${url}`);
-    try {
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 10000 });
-
+    try {// Navigate to the page
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+        
+        // Check for "Page Not Found" message
+        const pageContent = await page.content();
+        if (pageContent.includes("This Page Isn't Available") || pageContent.includes("content isn't available right now")) {
+            console.warn(`🚫 Content not available at ${url} — Skipping...`);
+            return {
+                LINK: url,
+                PAGE_NAME: 'Unavailable',
+                FOLLOWERS: 'N/A',
+                PAGEDETAILS: 'N/A',
+                LAST_POSTED: 'N/A',
+                LOCATION: 'N/A',
+                EMAIL_URL: '',
+                CONTACT_NUMBER: 'N/A',
+                INSTAGRAM_URL: '',
+                TIKTOK_URL: '',
+                YOUTUBE_URL: '',
+                X_URL: '',
+                PAGE_STATUS: 'Unavailable'
+            };
+        }
+        
         // Try to close login dialog if it appears
         try {
             const closeButtonSelector = 'div[role="dialog"] div[aria-label="Close"]';
-            await page.waitForSelector(closeButtonSelector, { timeout: 3000 });
+            await page.waitForSelector(closeButtonSelector, { timeout: 10000 });
             await page.click(closeButtonSelector);
         } catch (e) {
             // Dialog didn't appear, ignore
@@ -336,19 +357,23 @@ function isPostRecent(lastPosted: string): boolean {
       return false;
     }
   
-    // ❌ Case 2: If it contains a year (4-digit number)
-    if (/\d{4}/.test(trimmed)) {
-      return false;
-    }
-  
-    // ❌ Case 3: If the string contains no number (invalid)
+    // ❌ Case 2: If the string contains no numbers (invalid date format)
     if (!/\d/.test(trimmed)) {
       return false;
     }
   
-    // ✅ All other formats (like "March 2", "17h", etc.) are considered Active
+    // ✅ Extract the year (if any) from the string
+    const yearMatch = trimmed.match(/\d{4}/); // Match 4-digit year
+  
+    // ❌ Case 3: If there's no year found or the year is not 2025
+    if (!yearMatch || parseInt(yearMatch[0], 10) !== 2025) {
+      return false;
+    }
+  
+    // ✅ If the year is 2025, the post is considered active
     return true;
   }
+  
   
   
   
