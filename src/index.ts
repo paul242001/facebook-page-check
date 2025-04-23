@@ -12,12 +12,12 @@ const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random
 async function analyzePage(page: Page, url: string) {
     console.log(`🔍 Analyzing: ${url}`);
     try {
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 100000 });
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 10000 });
 
         // Try to close login dialog if it appears
         try {
             const closeButtonSelector = 'div[role="dialog"] div[aria-label="Close"]';
-            await page.waitForSelector(closeButtonSelector, { timeout: 5000 });
+            await page.waitForSelector(closeButtonSelector, { timeout: 3000 });
             await page.click(closeButtonSelector);
         } catch (e) {
             // Dialog didn't appear, ignore
@@ -74,17 +74,63 @@ async function analyzePage(page: Page, url: string) {
             console.warn(`⚠️ Category not found for: ${url}`);
         }
 
-        // ========== Extract Last Posted Date ==========
-        let lastPosted = 'N/A';
-        try {
-            await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', { timeout: 10000 });
-            const spanTexts = await page.$$eval('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', els =>
-                els.map(el => el.textContent?.trim())
-            );
-            lastPosted = (spanTexts[1] || '').split('·')[0].trim();
-        } catch (err) {
-            console.warn(`⚠️ Last posted date not found for: ${url}`);
+// ========== Extract Last Posted Date ==========
+let lastPosted = 'N/A';
+let lastPostedDate: Date | null = null;
+
+try {
+    await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', { timeout: 10000 });
+
+    const spanTexts = await page.$$eval('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', els =>
+        els.map(el => el.textContent?.trim())
+    );
+
+    const rawTimeAgo = (spanTexts[1] || '').split('·')[0].trim();  // e.g., "3w", "17h", "1d"
+    lastPosted = rawTimeAgo;
+
+    const now = new Date();
+    const regex = /^(\d+)([smhdw])$/i;
+    const match = rawTimeAgo.match(regex);
+
+    if (match) {
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+
+        // Clone current date
+        lastPostedDate = new Date(now);
+
+        switch (unit) {
+            case 's':
+                lastPostedDate.setSeconds(now.getSeconds() - value);
+                break;
+            case 'm':
+                lastPostedDate.setMinutes(now.getMinutes() - value);
+                break;
+            case 'h':
+                lastPostedDate.setHours(now.getHours() - value);
+                break;
+            case 'd':
+                lastPostedDate.setDate(now.getDate() - value);
+                break;
+            case 'w':
+                lastPostedDate.setDate(now.getDate() - (value * 7));
+                break;
         }
+
+        // Format to "Month Day" (e.g., "February 22")
+        const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
+        const formattedDate = lastPostedDate.toLocaleDateString('en-US', options);
+
+        lastPosted = formattedDate + ", 2025";
+    } else {
+        console.log(`📌 Last posted string "${rawTimeAgo}" is in an unrecognized format.`);
+    }
+
+} catch (err) {
+    console.warn(`⚠️ Last posted date not found for: ${url}`);
+}
+
+
         // ========== Extract Social Media Links by Platform ==========
         let location = '';
 
@@ -108,7 +154,6 @@ async function analyzePage(page: Page, url: string) {
             location = 'N/A';
         }
         
-        console.log('📍 Extracted Location:', location);
         
         
         
@@ -514,16 +559,21 @@ async function main() {
         // Highlight status with colors
         const statusCell = row.getCell('PAGE_STATUS');
         if (rowData.PAGE_STATUS === 'Active') {
-            statusCell.fill = {
+            row.getCell('PAGE_STATUS').fill = {
                 type: 'pattern',
                 pattern: 'solid',
                 fgColor: { argb: 'FF92D050' } // green
             };
         } else if (rowData.PAGE_STATUS === 'Not Active') {
-            statusCell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFFF5C5C' } // red
+            // Highlight the entire row from PAGE_NAME to PAGE_STATUS
+            const startColIndex = sheet.getColumn('PAGE_NAME').number;
+            const endColIndex = sheet.getColumn('PAGE_STATUS').number;
+            for (let i = startColIndex; i <= endColIndex; i++){
+                row.getCell(i).fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFF5C5C' } // red
+            }    
             };
         }
     });
