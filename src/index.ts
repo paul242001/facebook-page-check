@@ -143,6 +143,18 @@ async function analyzePage(page: Page, url: string) {
         } catch (err) {
             username = '';
         }
+
+        // ========== Extract Contact Number ==========
+        let contactNumber = 'N/A';
+        try {
+            const pageText = await page.evaluate(() => document.body.innerText);
+            const phoneMatch = pageText.match(/(\+?\d{1,3}[\s.-]?)?(\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/);
+            contactNumber = phoneMatch ? phoneMatch[0].trim() : 'N/A';
+        } catch (err) {
+            console.warn(`⚠️ Contact number not found for: ${url}`);
+        }
+        
+
         
         // ========== Extract all anchor tags with hrefs ==========
         const links = await page.$$eval('a', as => as.map(a => a.href));
@@ -204,6 +216,7 @@ async function analyzePage(page: Page, url: string) {
             LAST_POSTED: lastPosted,
             LOCATION: location,
             EMAIL_URL: email,
+            CONTACT_NUMBER: contactNumber,
             INSTAGRAM_URL: instagram,
             TIKTOK_URL: tiktok,
             YOUTUBE_URL: youtube,
@@ -455,6 +468,7 @@ async function main() {
         { header: 'CLASSIFICATION', key: 'PAGEDETAILS', width: 30, outlineLevel: 1 },
         { header: 'LOCATION', key: 'LOCATION', width: 40 },
         { header: 'EMAIL URL', key: 'EMAIL_URL', width: 35 },
+        { header: 'CONTACT NUMBER', key: 'CONTACT_NUMBER', width: 25 },
         { header: 'INSTAGRAM URL', key: 'INSTAGRAM_URL', width: 50 },
         { header: 'TIKTOK URL', key: 'TIKTOK_URL', width: 50 },
         { header: 'YOUTUBE URL', key: 'YOUTUBE_URL', width: 50 },
