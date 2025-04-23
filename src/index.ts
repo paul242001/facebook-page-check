@@ -482,7 +482,16 @@ async function main() {
         if (data.FOLLOWERS && data.FOLLOWERS !== 'N/A' && data.FOLLOWERS !== 'Error') {
             data.FOLLOWERS = convertFollowers(data.FOLLOWERS);
         }
-    
+// Define the header only once, outside the loop (if needed)
+const header = `PAGE_NAME,USERNAME,LINK,FOLLOWERS,CLASSIFICATION,LOCATION,EMAIL,CONTACT_NUMBER,INSTAGRAM,TIKTOK,YOUTUBE,X_URL,LAST_POSTED,PAGE_STATUS\n`;
+if (index === 0) fs.appendFileSync('liveScrapedData.txt', header, 'utf8');
+
+// Format data as CSV row
+const scrapedText = `${data.PAGE_NAME},${data.USERNAME},${data.LINK},${data.FOLLOWERS},${data.PAGEDETAILS},${data.LOCATION},${data.EMAIL_URL},${data.CONTACT_NUMBER},${data.INSTAGRAM_URL},${data.TIKTOK_URL},${data.YOUTUBE_URL},${data.X_URL},${data.LAST_POSTED},${data.PAGE_STATUS}\n`;
+
+// Append to CSV
+fs.appendFileSync('liveScrapedData.txt', scrapedText, 'utf8');
+
         results.push(data);
     
         // Track failed pages
