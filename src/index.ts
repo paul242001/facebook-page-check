@@ -11,34 +11,13 @@ const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random
 
 async function analyzePage(page: Page, url: string) {
     console.log(`🔍 Analyzing: ${url}`);
-    try {// Navigate to the page
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 100000 });
-        
-        // Check for "Page Not Found" message
-        const pageContent = await page.content();
-        if (pageContent.includes("This Page Isn't Available") || pageContent.includes("content isn't available right now")) {
-            console.warn(`🚫 Content not available at ${url} — Skipping...`);
-            return {
-                LINK: url,
-                PAGE_NAME: 'Unavailable',
-                FOLLOWERS: 'N/A',
-                PAGEDETAILS: 'N/A',
-                LAST_POSTED: 'N/A',
-                LOCATION: 'N/A',
-                EMAIL_URL: '',
-                CONTACT_NUMBER: 'N/A',
-                INSTAGRAM_URL: '',
-                TIKTOK_URL: '',
-                YOUTUBE_URL: '',
-                X_URL: '',
-                PAGE_STATUS: 'Unavailable'
-            };
-        }
-        
+    try {
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 10000 });
+
         // Try to close login dialog if it appears
         try {
             const closeButtonSelector = 'div[role="dialog"] div[aria-label="Close"]';
-            await page.waitForSelector(closeButtonSelector, { timeout: 5000 });
+            await page.waitForSelector(closeButtonSelector, { timeout: 3000 });
             await page.click(closeButtonSelector);
         } catch (e) {
             // Dialog didn't appear, ignore
@@ -96,38 +75,30 @@ async function analyzePage(page: Page, url: string) {
         }
 
 // ========== Extract Last Posted Date ==========
-let lastPosted: string = 'N/A';                      // Final formatted result (e.g., "March 5, 2025")
-let lastPostedDate: Date | null = null;              // Calculated Date object for last post
+let lastPosted = 'Error';
+let lastPostedDate: Date | null = null;
 
 try {
-    // Wait for the first post timestamp span to appear
-    await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', {
-        timeout: 10000,
-    });
+    await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', { timeout: 10000 });
 
-    // Grab all visible span texts under the first timeline post
-    const spanTexts = await page.$$eval(
-        'div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]',
-        (elements) => elements.map((el) => el.textContent?.trim())
+    const spanTexts = await page.$$eval('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', els =>
+        els.map(el => el.textContent?.trim())
     );
 
-    // Get the raw time-ago string (e.g., "3w", "17h", "1d")
-    const rawTimeAgo = (spanTexts[1] || '').split('·')[0].trim();
+    const rawTimeAgo = (spanTexts[1] || '').split('·')[0].trim();  // e.g., "3w", "17h", "1d"
     lastPosted = rawTimeAgo;
 
-    // Prepare to calculate date
     const now = new Date();
     const regex = /^(\d+)([smhdw])$/i;
     const match = rawTimeAgo.match(regex);
 
     if (match) {
-        const value: number = parseInt(match[1]);
-        const unit: string = match[2].toLowerCase();
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
 
-        // Clone the current time
+        // Clone current date
         lastPostedDate = new Date(now);
 
-        // Adjust date based on time unit
         switch (unit) {
             case 's':
                 lastPostedDate.setSeconds(now.getSeconds() - value);
@@ -142,25 +113,17 @@ try {
                 lastPostedDate.setDate(now.getDate() - value);
                 break;
             case 'w':
-                lastPostedDate.setDate(now.getDate() - value * 7);
-                break;
-            default:
-                console.warn(`⚠️ Unrecognized time unit: ${unit}`);
+                lastPostedDate.setDate(now.getDate() - (value * 7));
                 break;
         }
 
-        // Format to "Month Day, Year" (e.g., "February 22, 2025")
-        const options: Intl.DateTimeFormatOptions = {
-            month: 'long',
-            day: 'numeric',
-        };
-        const formattedDate: string = lastPostedDate.toLocaleDateString('en-US', options);
+        // Format to "Month Day" (e.g., "February 22")
+        const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
+        const formattedDate = lastPostedDate.toLocaleDateString('en-US', options);
 
-        lastPosted = `${formattedDate}, 2025`;
+        lastPosted = formattedDate;
     } else {
-        console.log(`📌 Last posted string "${rawTimeAgo}" is in an unrecognized format.`);
     }
-
 
 } catch (err) {
     console.warn(`⚠️ Last posted date not found for: ${url}`);
@@ -372,23 +335,19 @@ function isPostRecent(lastPosted: string): boolean {
       return false;
     }
   
-    // ❌ Case 2: If the string contains no numbers (invalid date format)
+    // ❌ Case 2: If it contains a year (4-digit number)
+    if (/\d{4}/.test(trimmed)) {
+      return false;
+    }
+  
+    // ❌ Case 3: If the string contains no number (invalid)
     if (!/\d/.test(trimmed)) {
       return false;
     }
   
-    // ✅ Extract the year (if any) from the string
-    const yearMatch = trimmed.match(/\d{4}/); // Match 4-digit year
-  
-    // ❌ Case 3: If there's no year found or the year is not 2025
-    if (!yearMatch || parseInt(yearMatch[0], 10) !== 2025) {
-      return false;
-    }
-  
-    // ✅ If the year is 2025, the post is considered active
+    // ✅ All other formats (like "March 2", "17h", etc.) are considered Active
     return true;
   }
-  
   
   
   
@@ -430,7 +389,7 @@ async function main() {
     // Step 1: Read from CSV
     console.log('📥 Reading CSV file...');
     await new Promise<void>((resolve, reject) => {
-        fs.createReadStream('link.csv')
+        fs.createReadStream('input/link.csv')
             .pipe(csv())
             .on('data', (row) => {
                 if (row.URL) links.push(row.URL);
@@ -482,16 +441,7 @@ async function main() {
         if (data.FOLLOWERS && data.FOLLOWERS !== 'N/A' && data.FOLLOWERS !== 'Error') {
             data.FOLLOWERS = convertFollowers(data.FOLLOWERS);
         }
-// Define the header only once, outside the loop (if needed)
-const header = `PAGE_NAME,USERNAME,LINK,FOLLOWERS,CLASSIFICATION,LOCATION,EMAIL,CONTACT_NUMBER,INSTAGRAM,TIKTOK,YOUTUBE,X_URL,LAST_POSTED,PAGE_STATUS\n`;
-if (index === 0) fs.appendFileSync('liveScrapedData.txt', header, 'utf8');
-
-// Format data as CSV row
-const scrapedText = `${data.PAGE_NAME},${data.USERNAME},${data.LINK},${data.FOLLOWERS},${data.PAGEDETAILS},${data.LOCATION},${data.EMAIL_URL},${data.CONTACT_NUMBER},${data.INSTAGRAM_URL},${data.TIKTOK_URL},${data.YOUTUBE_URL},${data.X_URL},${data.LAST_POSTED},${data.PAGE_STATUS}\n`;
-
-// Append to CSV
-fs.appendFileSync('liveScrapedData.txt', scrapedText, 'utf8');
-
+    
         results.push(data);
     
         // Track failed pages
@@ -646,7 +596,7 @@ fs.appendFileSync('liveScrapedData.txt', scrapedText, 'utf8');
  
      // Format filename with timestamp
      const timestamp = `${month}-${day}-${year}_${pad(hours)}-${minutes}-${seconds}_${ampm}`;
-     const fileName = `Facebook_Pages_${timestamp}.xlsx`;
+     const fileName = `output/Facebook-Pages-Distributors${timestamp}.xlsx`;
  
      // Save the workbook
      await workbook.xlsx.writeFile(fileName);
