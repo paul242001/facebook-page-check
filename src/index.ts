@@ -12,12 +12,12 @@ const randomDelay = () => new Promise(resolve => setTimeout(resolve, Math.random
 async function analyzePage(page: Page, url: string) {
     console.log(`🔍 Analyzing: ${url}`);
     try {
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 10000 });
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 100000 });
 
         // Try to close login dialog if it appears
         try {
             const closeButtonSelector = 'div[role="dialog"] div[aria-label="Close"]';
-            await page.waitForSelector(closeButtonSelector, { timeout: 3000 });
+            await page.waitForSelector(closeButtonSelector, { timeout: 5000 });
             await page.click(closeButtonSelector);
         } catch (e) {
             // Dialog didn't appear, ignore
@@ -74,62 +74,17 @@ async function analyzePage(page: Page, url: string) {
             console.warn(`⚠️ Category not found for: ${url}`);
         }
 
-// ========== Extract Last Posted Date ==========
-let lastPosted = 'Error';
-let lastPostedDate: Date | null = null;
-
-try {
-    await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', { timeout: 10000 });
-
-    const spanTexts = await page.$$eval('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', els =>
-        els.map(el => el.textContent?.trim())
-    );
-
-    const rawTimeAgo = (spanTexts[1] || '').split('·')[0].trim();  // e.g., "3w", "17h", "1d"
-    lastPosted = rawTimeAgo;
-
-    const now = new Date();
-    const regex = /^(\d+)([smhdw])$/i;
-    const match = rawTimeAgo.match(regex);
-
-    if (match) {
-        const value = parseInt(match[1]);
-        const unit = match[2].toLowerCase();
-
-        // Clone current date
-        lastPostedDate = new Date(now);
-
-        switch (unit) {
-            case 's':
-                lastPostedDate.setSeconds(now.getSeconds() - value);
-                break;
-            case 'm':
-                lastPostedDate.setMinutes(now.getMinutes() - value);
-                break;
-            case 'h':
-                lastPostedDate.setHours(now.getHours() - value);
-                break;
-            case 'd':
-                lastPostedDate.setDate(now.getDate() - value);
-                break;
-            case 'w':
-                lastPostedDate.setDate(now.getDate() - (value * 7));
-                break;
+        // ========== Extract Last Posted Date ==========
+        let lastPosted = 'N/A';
+        try {
+            await page.waitForSelector('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', { timeout: 10000 });
+            const spanTexts = await page.$$eval('div[data-pagelet="TimelineFeedUnit_0"] span[dir="ltr"]', els =>
+                els.map(el => el.textContent?.trim())
+            );
+            lastPosted = (spanTexts[1] || '').split('·')[0].trim();
+        } catch (err) {
+            console.warn(`⚠️ Last posted date not found for: ${url}`);
         }
-
-        // Format to "Month Day" (e.g., "February 22")
-        const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
-        const formattedDate = lastPostedDate.toLocaleDateString('en-US', options);
-
-        lastPosted = formattedDate;
-    } else {
-    }
-
-} catch (err) {
-    console.warn(`⚠️ Last posted date not found for: ${url}`);
-}
-
-
         // ========== Extract Social Media Links by Platform ==========
         let location = '';
 
@@ -153,6 +108,7 @@ try {
             location = 'N/A';
         }
         
+        console.log('📍 Extracted Location:', location);
         
         
         
@@ -170,41 +126,23 @@ try {
         let username = '';
 
         try {
-            const pageUrl = page.url(); // Get the current URL
-            const urlMatch = pageUrl.match(/facebook\.com\/([^/?&]+)/i);
+            // Try Open Graph meta tag first
+            username = await page.$eval('meta[property="og:title"]', el => el.getAttribute('content') || '') ?? '';
         
-            if (urlMatch && urlMatch[1]) {
-                username = urlMatch[1];
-            } else {
-                // Fallback: check in meta tags or page content if URL doesn't help
-                const html = await page.content();
-        
-                // Try from canonical link
-                const canonicalMatch = html.match(/<link rel="canonical" href="https:\/\/www\.facebook\.com\/([^/?&"]+)/);
-                if (canonicalMatch && canonicalMatch[1]) {
-                    username = canonicalMatch[1];
-                }
+            // Fallback to page title if username is still empty
+            if (!username) {
+                username = await page.title();
             }
         
-            // Optional cleanup if needed
-            username = username.replace(/\/$/, ''); // remove trailing slash
+            // Optional: Clean username if it's like "Page Name | Something"
+            if (username.includes('|')) {
+                username = username.split('|')[0].trim();
+            } else if (username.includes('-')) {
+                username = username.split('-')[0].trim();
+            }
         } catch (err) {
-            console.warn('⚠️ Could not extract real username');
             username = '';
         }
-        
-
-        // ========== Extract Contact Number ==========
-        let contactNumber = 'N/A';
-        try {
-            const pageText = await page.evaluate(() => document.body.innerText);
-            const phoneMatch = pageText.match(/(\+?\d{1,3}[\s.-]?)?(\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/);
-            contactNumber = phoneMatch ? phoneMatch[0].trim() : 'N/A';
-        } catch (err) {
-            console.warn(`⚠️ Contact number not found for: ${url}`);
-        }
-        
-
         
         // ========== Extract all anchor tags with hrefs ==========
         const links = await page.$$eval('a', as => as.map(a => a.href));
@@ -266,7 +204,6 @@ try {
             LAST_POSTED: lastPosted,
             LOCATION: location,
             EMAIL_URL: email,
-            CONTACT_NUMBER: contactNumber,
             INSTAGRAM_URL: instagram,
             TIKTOK_URL: tiktok,
             YOUTUBE_URL: youtube,
@@ -386,19 +323,23 @@ async function main() {
     const links: string[] = [];
     
 
+
     // Step 1: Read from CSV
     console.log('📥 Reading CSV file...');
     await new Promise<void>((resolve, reject) => {
+        if (!fs.existsSync('input')) {
+            fs.mkdirSync('input', { recursive: true });
+        }
         fs.createReadStream('input/link.csv')
             .pipe(csv())
-            .on('data', (row) => {
+            .on('data', (row: { URL: string; }) => {
                 if (row.URL) links.push(row.URL);
             })
             .on('end', () => {
                 console.log(`📄 Total URLs loaded: ${links.length}`);
                 resolve();
             })
-            .on('error', (err) => {
+            .on('error', (err: any) => {
                 console.error('❌ Failed to read CSV:', err);
                 reject(err);
             });
@@ -518,7 +459,6 @@ async function main() {
         { header: 'CLASSIFICATION', key: 'PAGEDETAILS', width: 30, outlineLevel: 1 },
         { header: 'LOCATION', key: 'LOCATION', width: 40 },
         { header: 'EMAIL URL', key: 'EMAIL_URL', width: 35 },
-        { header: 'CONTACT NUMBER', key: 'CONTACT_NUMBER', width: 25 },
         { header: 'INSTAGRAM URL', key: 'INSTAGRAM_URL', width: 50 },
         { header: 'TIKTOK URL', key: 'TIKTOK_URL', width: 50 },
         { header: 'YOUTUBE URL', key: 'YOUTUBE_URL', width: 50 },
@@ -530,7 +470,7 @@ async function main() {
     
     
     // Apply header style
-    sheet.getRow(1).eachCell((cell) => {
+    sheet.getRow(1).eachCell((cell: any) => {
         Object.assign(cell, headerStyle);
     });
     
@@ -540,13 +480,13 @@ async function main() {
     
         // Apply alternating row color style
         if (rowIndex % 2 === 0) {
-            row.eachCell((cell) => {
+            row.eachCell((cell: any) => {
                 Object.assign(cell, alternatingRowStyle);
             });
         }
     
         // Apply standard cell style
-        row.eachCell((cell, colIndex) => {
+        row.eachCell((cell: any, colIndex: number) => {
             // Special style for the Page Name column
             if (colIndex === 1) {
                 Object.assign(cell, pageNameStyle);
@@ -558,21 +498,16 @@ async function main() {
         // Highlight status with colors
         const statusCell = row.getCell('PAGE_STATUS');
         if (rowData.PAGE_STATUS === 'Active') {
-            row.getCell('PAGE_STATUS').fill = {
+            statusCell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
                 fgColor: { argb: 'FF92D050' } // green
             };
         } else if (rowData.PAGE_STATUS === 'Not Active') {
-            // Highlight the entire row from PAGE_NAME to PAGE_STATUS
-            const startColIndex = sheet.getColumn('PAGE_NAME').number;
-            const endColIndex = sheet.getColumn('PAGE_STATUS').number;
-            for (let i = startColIndex; i <= endColIndex; i++){
-                row.getCell(i).fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFFF5C5C' } // red
-            }    
+            statusCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFF5C5C' } // red
             };
         }
     });
@@ -596,10 +531,13 @@ async function main() {
  
      // Format filename with timestamp
      const timestamp = `${month}-${day}-${year}_${pad(hours)}-${minutes}-${seconds}_${ampm}`;
-     const fileName = `output/Facebook-Pages-Distributors${timestamp}.xlsx`;
- 
+     const fileName = `Facebook_Pages_${timestamp}.xlsx`;
+    
+     if (!fs.existsSync('output')) {
+        fs.mkdirSync('output', { recursive: true });
+     }
      // Save the workbook
-     await workbook.xlsx.writeFile(fileName);
+     await workbook.xlsx.writeFile(`output/${fileName}`);
      console.log(`✅ Excel file saved as: ${fileName}`);
  
      // Step 5: Log failed links (if any)
