@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Page Checker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #4267B2;
+            --primary-dark: #365899;
+            --primary-light: #5b7bd5;
+            --bg-dark: #1a1a2e;
+            --bg-card: #16213e;
+            --bg-input: #0f3460;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0c0;
+            --success: #4ade80;
+            --error: #f87171;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            padding: 30px 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .logo svg {
+            width: 48px;
+            height: 48px;
+        }
+
+        .logo h1 {
+            font-size: 28px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #fff 0%, #a0a0c0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card h2 {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .link-count {
+            font-size: 13px;
+            color: var(--primary-light);
+            background: rgba(66, 103, 178, 0.2);
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+
+        .textarea {
+            width: 100%;
+            min-height: 200px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            color: var(--text-primary);
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            resize: vertical;
+        }
+
+        .textarea::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(66, 103, 178, 0.2);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(66, 103, 178, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-large {
+            padding: 14px 32px;
+            font-size: 16px;
+            width: 100%;
+        }
+
+        .progress-section {
+            display: none;
+        }
+
+        .progress-section.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-input);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .current-task {
+            background: var(--bg-input);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .log {
+            background: var(--bg-input);
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.8;
+        }
+
+        .log-entry {
+            padding: 2px 0;
+        }
+
+        .log-entry.success { color: var(--success); }
+        .log-entry.error { color: var(--error); }
+        .log-entry.info { color: var(--text-secondary); }
+
+        .files-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border-radius: 8px;
+        }
+
+        .file-name {
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .file-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .btn-download {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-input);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" fill="#4267B2"/>
+                    <path d="M15.5 8H14C13.17 8 12.5 8.67 12.5 9.5V11H15.5L15 14H12.5V21H9.5V14H7V11H9.5V9C9.5 7.07 11.07 5.5 13 5.5H15.5V8Z" fill="white"/>
+                </svg>
+                <h1>Facebook Page Checker</h1>
+            </div>
+            <p class="subtitle">Analyze Facebook pages and extract data to Excel</p>
+        </header>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Facebook Page Links</h2>
+                <span class="link-count" id="linkCount">0 links</span>
+            </div>
+            <textarea
+                class="textarea"
+                id="linksInput"
+                placeholder="Paste Facebook page URLs here (one per line)
+
+Example:
+https://www.facebook.com/PageName1
+https://www.facebook.com/PageName2
+https://www.facebook.com/PageName3"
+            ></textarea>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="clearBtn">Clear</button>
+                <button class="btn btn-secondary" id="pasteBtn">Paste from Clipboard</button>
+            </div>
+        </div>
+
+        <div class="card progress-section" id="progressSection">
+            <h2>Progress</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-info">
+                <span id="progressText">0 / 0</span>
+                <span id="progressPercent">0%</span>
+            </div>
+            <div class="current-task" id="currentTask">Waiting to start...</div>
+            <div class="log" id="logOutput"></div>
+        </div>
+
+        <button class="btn btn-primary btn-large" id="startBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Start Analysis
+        </button>
+
+        <div class="card" style="margin-top: 20px;">
+            <h2>Downloaded Files</h2>
+            <div id="filesList" class="files-list">
+                <div class="empty-state">No files yet</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const linksInput = document.getElementById('linksInput');
+        const linkCount = document.getElementById('linkCount');
+        const clearBtn = document.getElementById('clearBtn');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const startBtn = document.getElementById('startBtn');
+        const progressSection = document.getElementById('progressSection');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const progressPercent = document.getElementById('progressPercent');
+        const currentTask = document.getElementById('currentTask');
+        const logOutput = document.getElementById('logOutput');
+        const filesList = document.getElementById('filesList');
+
+        let isRunning = false;
+
+        function parseLinks(text) {
+            return text
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.startsWith('http'));
+        }
+
+        function updateLinkCount() {
+            const count = parseLinks(linksInput.value).length;
+            linkCount.textContent = `${count} link${count !== 1 ? 's' : ''}`;
+        }
+
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : '→';
+            entry.textContent = `${icon} ${message}`;
+            logOutput.appendChild(entry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        async function loadFiles() {
+            try {
+                const res = await fetch('/api/files');
+                const data = await res.json();
+
+                if (data.files.length === 0) {
+                    filesList.innerHTML = '<div class="empty-state">No files yet</div>';
+                    return;
+                }
+
+                filesList.innerHTML = data.files.map(file => `
+                    <div class="file-item">
+                        <div>
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-meta">${(file.size / 1024).toFixed(1)} KB</div>
+                        </div>
+                        <a href="${file.path}" class="btn btn-secondary btn-download" download>Download</a>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load files:', err);
+            }
+        }
+
+        async function pollProgress(sessionId) {
+            while (true) {
+                try {
+                    const res = await fetch(`/api/progress/${sessionId}`);
+                    const session = await res.json();
+
+                    if (session.progress) {
+                        const p = session.progress;
+                        const percent = Math.round((p.current / p.total) * 100);
+                        progressFill.style.width = `${percent}%`;
+                        progressText.textContent = `${p.current} / ${p.total}`;
+                        progressPercent.textContent = `${percent}%`;
+                        currentTask.textContent = `Analyzing: ${p.currentUrl}`;
+
+                        if (p.status === 'completed') {
+                            addLog(`Completed: ${p.currentUrl}`, 'success');
+                        } else if (p.status === 'error') {
+                            addLog(`Failed: ${p.currentUrl}`, 'error');
+                        }
+                    }
+
+                    if (session.status === 'completed') {
+                        currentTask.textContent = 'Analysis complete!';
+                        addLog(`Done! Output: ${session.result.outputFile}`, 'success');
+                        loadFiles();
+                        break;
+                    } else if (session.status === 'error') {
+                        currentTask.textContent = 'Error occurred';
+                        addLog(`Error: ${session.error}`, 'error');
+                        break;
+                    }
+
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch (err) {
+                    console.error('Poll error:', err);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+
+            isRunning = false;
+            startBtn.disabled = false;
+            startBtn.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                Start Analysis
+            `;
+        }
+
+        linksInput.addEventListener('input', updateLinkCount);
+
+        clearBtn.addEventListener('click', () => {
+            linksInput.value = '';
+            updateLinkCount();
+        });
+
+        pasteBtn.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                linksInput.value = text;
+                updateLinkCount();
+            } catch (err) {
+                alert('Could not read clipboard. Please paste manually.');
+            }
+        });
+
+        startBtn.addEventListener('click', async () => {
+            if (isRunning) return;
+
+            const links = parseLinks(linksInput.value);
+
+            if (links.length === 0) {
+                alert('Please enter at least one Facebook page URL.');
+                return;
+            }
+
+            isRunning = true;
+            startBtn.disabled = true;
+            startBtn.innerHTML = `
+                <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                    <path d="M12 2a10 10 0 0110 10"/>
+                </svg>
+                Analyzing...
+            `;
+
+            progressSection.classList.add('active');
+            logOutput.innerHTML = '';
+            progressFill.style.width = '0%';
+            progressText.textContent = `0 / ${links.length}`;
+            progressPercent.textContent = '0%';
+            currentTask.textContent = 'Starting browser...';
+
+            addLog(`Starting analysis of ${links.length} pages...`, 'info');
+
+            try {
+                const res = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ links })
+                });
+
+                const { sessionId } = await res.json();
+                pollProgress(sessionId);
+            } catch (err) {
+                alert('Failed to start analysis: ' + err.message);
+                isRunning = false;
+                startBtn.disabled = false;
+            }
+        });
+
+        // Load files on page load
+        loadFiles();
+    </script>
+</body>
+</html>
